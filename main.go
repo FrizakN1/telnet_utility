@@ -120,7 +120,7 @@ func readUntilPrompt(conn *telnet.Conn, ip string, logger io.Writer, timeout tim
 			strings.Contains(output.String(), "?") ||
 			strings.Contains(output.String(), "#") {
 
-			fmt.Fprintf(logger, "[%s] Ответ: %s", ip, strings.Split(chunk, "\n")[1])
+			fmt.Fprintf(logger, "[%s] Ответ: %s", ip, chunk)
 
 			return nil
 		}
