@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -59,15 +60,23 @@ func worker(jobs <-chan string, commands []string, wg *sync.WaitGroup) {
 }
 
 func handleSwitch(ip string, commands []string) error {
+	file, err := os.Create("results/" + ip + ".txt")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
 	conn, err := telnet.Dial("tcp", ip+":"+os.Getenv("SWITCH_TELNET_PORT"))
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
+	logger := io.MultiWriter(os.Stdout, file)
+
 	conn.SetDeadline(time.Now().Add(timeout))
 
-	err = login(conn)
+	err = login(conn, logger)
 	if err != nil {
 		return err
 	}
@@ -77,11 +86,11 @@ func handleSwitch(ip string, commands []string) error {
 			continue
 		}
 
-		fmt.Printf("[%s] Выполняем: %s\n", ip, cmd)
+		fmt.Fprintf(logger, "\n[%s] Выполняем: %s\n", ip, cmd)
 
 		conn.Write([]byte(cmd + "\n"))
 
-		if err = readUntilPrompt(conn, timeout); err != nil {
+		if err = readUntilPrompt(conn, ip, logger, timeout); err != nil {
 			return err
 		}
 	}
@@ -89,7 +98,7 @@ func handleSwitch(ip string, commands []string) error {
 	return nil
 }
 
-func readUntilPrompt(conn *telnet.Conn, timeout time.Duration) error {
+func readUntilPrompt(conn *telnet.Conn, ip string, logger io.Writer, timeout time.Duration) error {
 	buffer := make([]byte, 1024)
 	var output strings.Builder
 
@@ -104,13 +113,14 @@ func readUntilPrompt(conn *telnet.Conn, timeout time.Duration) error {
 		}
 
 		chunk := string(buffer[:n])
-		fmt.Print(chunk)
 		output.WriteString(chunk)
 
 		if strings.Contains(output.String(), ">") ||
 			strings.Contains(output.String(), ":") ||
 			strings.Contains(output.String(), "?") ||
 			strings.Contains(output.String(), "#") {
+
+			fmt.Fprintf(logger, "[%s] Ответ: %s", ip, strings.Split(chunk, "\n")[1])
 
 			return nil
 		}
@@ -140,7 +150,7 @@ func readLines(path string) []string {
 	return lines
 }
 
-func login(conn *telnet.Conn) error {
+func login(conn *telnet.Conn, logger io.Writer) error {
 	buffer := make([]byte, 1024)
 	var output strings.Builder
 
@@ -158,8 +168,9 @@ func login(conn *telnet.Conn) error {
 		}
 
 		chunk := string(buffer[:n])
-		fmt.Print(chunk) // debug
 		output.WriteString(chunk)
+
+		fmt.Fprint(logger, chunk)
 
 		text := output.String()
 
