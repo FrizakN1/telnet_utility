@@ -14,8 +14,8 @@ import (
 	"github.com/ziutek/telnet"
 )
 
-const (
-	timeout = 5 * time.Second
+var (
+	timeout time.Duration
 )
 
 func main() {
@@ -26,6 +26,13 @@ func main() {
 
 	ips := readLines("ips.txt")
 	commands := readLines("commands.txt")
+
+	timeoutInt, err := strconv.Atoi(os.Getenv("TIMEOUT"))
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	timeout = time.Duration(timeoutInt)*time.Second + time.Duration(len(commands))*time.Second
 
 	commandDelay, err := strconv.Atoi(os.Getenv("COMMAND_DELAY"))
 	if err != nil {
