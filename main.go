@@ -6,8 +6,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	timeout    = 5 * time.Second
-	workerPool = 5
+	timeout = 5 * time.Second
 )
 
 func main() {
@@ -28,38 +27,25 @@ func main() {
 	ips := readLines("ips.txt")
 	commands := readLines("commands.txt")
 
-	jobs := make(chan string)
-	var wg sync.WaitGroup
-
-	for i := 0; i < workerPool; i++ {
-		wg.Add(1)
-		go worker(jobs, commands, &wg)
+	commandDelay, err := strconv.Atoi(os.Getenv("COMMAND_DELAY"))
+	if err != nil {
+		log.Fatalln(err)
 	}
 
 	for _, ip := range ips {
-		jobs <- ip
-	}
-	close(jobs)
-
-	wg.Wait()
-	fmt.Println("Готово.")
-}
-
-func worker(jobs <-chan string, commands []string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for ip := range jobs {
 		fmt.Println("Подключаемся к", ip)
-		err := handleSwitch(ip, commands)
+		err := handleSwitch(ip, commands, commandDelay)
 		if err != nil {
 			log.Printf("[%s] ошибка: %v\n", ip, err)
 		} else {
 			fmt.Printf("[%s] успешно\n", ip)
 		}
 	}
+
+	fmt.Println("Готово.")
 }
 
-func handleSwitch(ip string, commands []string) error {
+func handleSwitch(ip string, commands []string, commandDelay int) error {
 	file, err := os.Create("results/" + ip + ".txt")
 	if err != nil {
 		return err
@@ -89,6 +75,8 @@ func handleSwitch(ip string, commands []string) error {
 		fmt.Fprintf(logger, "\n[%s] Выполняем: %s\n", ip, cmd)
 
 		conn.Write([]byte(cmd + "\n"))
+
+		time.Sleep(time.Duration(commandDelay) * time.Millisecond)
 
 		if err = readUntilPrompt(conn, ip, logger, timeout); err != nil {
 			return err
